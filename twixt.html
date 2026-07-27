@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Twixt 24x24 - AI Rebuilt v4 (Fixed Legal Moves)</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; color: #222; margin: 10px; font-size: 0.9rem; }
+        h1 { text-align: center; margin: 0 0 5px 0; font-size: 1.5rem; color: #111; }
+        
+        .status-container { margin-bottom: 10px; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+        #vs-indicator { font-size: 1rem; font-weight: bold; background: #e3f2fd; color: #0d47a1; padding: 4px 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #bbdefb; }
+        #turn-indicator { font-size: 1rem; font-weight: bold; background: #fff; padding: 4px 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #ccc; }
+        #hover-coordinate { font-size: 1rem; font-weight: bold; background: #fff; padding: 4px 10px; border-radius: 6px; border: 1px solid #ccc; min-width: 130px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        .action-bar { margin-top: 15px; display: flex; justify-content: center; align-items: center; gap: 12px; }
+        
+        button, select { padding: 6px 14px; font-size: 0.95rem; cursor: pointer; border-radius: 4px; border: 1px solid #999; background: #fff; font-weight: bold; }
+        button:hover { background: #e0e0e0; }
+        #undo-btn { background: #fff3e0; border-color: #ffcc80; color: #e65100; }
+        #undo-btn:hover { background: #ffe0b2; }
+        #menu-btn { background: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; }
+        #menu-btn:hover { background: #c8e6c9; }
+        #reset-btn { background: #ffebee; border-color: #ef9a9a; color: #c62828; }
+        #reset-btn:hover { background: #ffcdd2; }
+
+        .pie-rule-bar {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            background: #fff8e1;
+            border: 2px solid #ffe082;
+            padding: 8px;
+            border-radius: 6px;
+            margin: 0 auto 10px auto;
+            max-width: 800px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            z-index: 5;
+            position: relative;
+        }
+        .pie-text { font-weight: bold; color: #795548; }
+        .pie-btn-swap { background: #e1f5fe; border-color: #81d4fa; color: #0288d1; }
+        .pie-btn-swap:hover { background: #b3e5fc; }
+        .pie-btn-stay { background: #eceff1; border-color: #b0bec5; color: #546e7a; }
+        .pie-btn-stay:hover { background: #cfd8dc; }
+
+        .main-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 15px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .board-wrapper {
+            position: relative;
+            width: 580px;
+            height: 580px;
+            background: #dcdcdc; 
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-sizing: border-box;
+            flex-shrink: 0;
+            border: 2px solid #999;
+        }
+
+        .grid-layer {
+            display: grid;
+            grid-template-columns: 22px repeat(24, 1fr);
+            grid-template-rows: 22px repeat(24, 1fr);
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1; 
+            box-sizing: border-box;
+        }
+
+        .cell {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid #cecece; 
+            box-sizing: border-box;
+        }
+        .cell::after {
+            content: '';
+            width: 5px;
+            height: 5px;
+            background: #666;
+            border-radius: 50%;
+            position: absolute;
+            pointer-events: none;
+        }
+        .cell:hover::after { background: #000; width: 8px; height: 8px; }
+
+        .svg-layer {
+            position: absolute;
+            top: 22px;
+            left: 22px;
+            width: calc(100% - 22px);
+            height: calc(100% - 22px);
+            z-index: 2; 
+            pointer-events: none;
+        }
+
+        .row-0, .row-23 { background: rgba(255, 0, 0, 0.08); }
+        .col-0, .col-23 { background: rgba(0, 255, 0, 0.08); }
+        .row-11 { border-bottom: 2px dashed #444; }
+        .col-11 { border-right: 2px dashed #444; }
+        .row-0 { border-bottom: 4px solid #cc0000; }
+        .row-22 { border-bottom: 4px solid #cc0000; }
+        .col-0 { border-right: 4px solid #0044cc; }
+        .col-22 { border-right: 4px solid #0044cc; }
+
+        .peg {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            z-index: 3; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none; 
+        }
+        .peg-red { background: #e53935; border: 2px solid #b71c1c; }
+        .peg-blue { background: #1e88e5; border: 2px solid #0d47a1; }
+        .peg-preview { opacity: 0.5; }
+
+        .last-move-marker {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border: 2px dashed #000000;
+            border-radius: 50%;
+            z-index: 4; 
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+
+        .axis-label {
+            font-size: 11px;
+            font-weight: bold;
+            color: #111;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            background: #f0f0f0;
+        }
+
+        .guide-panel {
+            width: 220px;
+            background: #fff;
+            padding: 8px 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: 2px solid #bbb;
+            box-sizing: border-box;
+            height: 580px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .guide-panel h2 { font-size: 0.95rem; margin: 0 0 3px 0; border-bottom: 2px solid #cc0000; padding-bottom: 2px; text-align: center; color: #111; }
+        .shape-item { text-align: center; }
+        .shape-title { font-weight: bold; font-size: 0.8rem; color: #b71c1c; text-align: left; border-left: 3px solid #b71c1c; padding-left: 5px; margin-bottom: 1px; }
+
+        .mini-board { position: relative; background: #e0e0e0; border: 1.5px solid #666; margin: 0 auto; display: grid; }
+        .mini-cell { position: relative; display: flex; align-items: center; justify-content: center; height: 14px; border: 1px solid #ccc; box-sizing: border-box; }
+        .mini-cell::after { content: ''; width: 3px; height: 3px; background: #888; border-radius: 50%; }
+        .m-peg-red { position: absolute; width: 10px; height: 10px; background: #e53935; border: 1px solid #b71c1c; border-radius: 50%; z-index: 3; box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+        .m-peg-white { position: absolute; width: 10px; height: 10px; background: rgba(30, 136, 229, 0.3); border: 1.5px dashed #0d47a1; border-radius: 50%; z-index: 3; box-shadow: 0 1px 2px rgba(0,0,0,0.2); box-sizing: border-box; }
+        .mini-svg { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; }
+        .mini-svg line { stroke: #cc0000; stroke-width: 1.8; stroke-dasharray: 3 1.5; }
+
+        .modal-overlay {
+            display: flex;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.4);
+            border: 3px solid #333;
+            max-width: 320px;
+            width: 90%;
+            box-sizing: border-box;
+        }
+
+        .modal-content h3 { margin: 0 0 15px 0; text-align: center; font-size: 1.3rem; border-bottom: 2px solid #333; padding-bottom: 5px; }
+        .form-group { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-weight: bold; font-size: 0.85rem; color: #444; }
+        .form-group select { width: 100%; padding: 6px; font-size: 0.95rem; }
+        
+        .modal-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        .modal-buttons button { flex: 1; padding: 8px; font-size: 1rem; }
+        .btn-primary { background: #2e7d32; color: white; border-color: #1b5e20; }
+        .btn-primary:hover { background: #1b5e20; }
+        .btn-secondary { background: #eceff1; border-color: #b0bec5; color: #37474f; }
+        .btn-secondary:hover { background: #cfd8dc; }
+
+        #winner-title { text-align: center; font-size: 1.4rem; margin: 0 0 10px 0; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; }
+        #winner-message { font-size: 1.5rem; font-weight: bold; text-align: center; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+    <h1>Twixt (24 x 24)</h1>
+    
+    <div class="pie-rule-bar" id="pie-rule-bar">
+        <span class="pie-text" id="pie-text-msg">🥧 先手の初手が打たれました。手番交換（パイ・ルール）を適用しますか？</span>
+        <button class="pie-btn-swap" id="pie-swap-btn">手番を交換して「赤(上下)」を引き継ぐ</button>
+        <button class="pie-btn-stay" id="pie-stay-btn">交換せず「青(左右)」のまま打つ</button>
+    </div>
+    
+    <div class="status-container">
+        <div id="vs-indicator">対戦相手: --</div>
+        <div id="turn-indicator">現在の番: <span style="color: #e53935;">赤 (上下)</span></div>
+        <div id="hover-coordinate">選択中の座標：--</div>
+    </div>
+    
+    <div class="main-container">
+        <div class="board-wrapper">
+            <!-- 設定画面モーダル -->
+            <div class="modal-overlay" id="config-modal">
+                <div class="modal-content">
+                    <h3>対戦モード設定</h3>
+                    <div class="form-group">
+                        <label>ゲームモード</label>
+                        <select id="select-mode">
+                            <option value="pvp">二人で対戦 (PvP)</option>
+                            <option value="pve" selected>CPUと対戦 (PvE)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="cpu-side-group">
+                        <label>あなたの担当色</label>
+                        <select id="select-side">
+                            <option value="random">ランダム</option>
+                            <option value="red">赤 (先手・上下接続)</option>
+                            <option value="blue" selected>青 (後手・左右接続)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="cpu-level-group">
+                        <label>CPUの強さ</label>
+                        <select id="select-level">
+                            <option value="1">初級 (Easy)</option>
+                            <option value="2">中級 (Medium)</option>
+                            <option value="3" selected>上級 (Hard)</option>
+                            <option value="4">超級 (Expert)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>手番交換 (パイ・ルール)</label>
+                        <select id="select-pie">
+                            <option value="false" selected>無効 (通常ルール)</option>
+                            <option value="true">有効 (先手有利を相殺)</option>
+                        </select>
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" id="config-cancel-btn" style="display:none;">キャンセル</button>
+                        <button class="btn-primary" id="config-start-btn">対戦開始！</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 勝敗通知モーダル -->
+            <div class="modal-overlay" id="winner-modal" style="display: none;">
+                <div class="modal-content">
+                    <div id="winner-title">GAME OVER</div>
+                    <div id="winner-message">〇〇の勝ち！</div>
+                    <div class="modal-buttons">
+                        <button class="btn-primary" id="winner-restart-btn">もう一度遊ぶ</button>
+                    </div>
+                </div>
+            </div>
+
+            <svg class="svg-layer" id="svg-layer"></svg>
+            <div class="grid-layer" id="board"></div>
+        </div>
+
+        <!-- 右側：ガイドパネル -->
+        <div class="guide-panel">
+            <h2>必修 5大基本定石</h2>
+            <div class="shape-item">
+                <div class="shape-title">①</div>
+                <div class="mini-board" style="grid-template-columns: repeat(5, 14px); width: 70px; height: 98px;">
+                    <svg class="mini-svg" style="width: 70px; height: 98px;">
+                        <line x1="35" y1="21" x2="21" y2="49"></line> <line x1="21" y1="49" x2="35" y2="77"></line>
+                        <line x1="35" y1="21" x2="49" y2="49"></line> <line x1="49" y1="49" x2="35" y2="77"></line>
+                    </svg>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                </div>
+            </div>
+            <div class="shape-item">
+                <div class="shape-title">②</div>
+                <div class="mini-board" style="grid-template-columns: repeat(6, 14px); width: 84px; height: 84px;">
+                    <svg class="mini-svg" style="width: 84px; height: 84px;">
+                        <line x1="21" y1="21" x2="49" y2="35"></line> <line x1="49" y1="35" x2="63" y2="63"></line>
+                        <line x1="21" y1="21" x2="35" y2="49"></line> <line x1="35" y1="49" x2="63" y2="63"></line>
+                    </svg>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                </div>
+            </div>
+            <div class="shape-item">
+                <div class="shape-title">③</div>
+                <div class="mini-board" style="grid-template-columns: repeat(6, 14px); width: 84px; height: 84px;">
+                    <svg class="mini-svg" style="width: 84px; height: 84px;">
+                        <line x1="35" y1="21" x2="21" y2="49"></line> <line x1="21" y1="49" x2="49" y2="63"></line>
+                        <line x1="35" y1="21" x2="63" y2="35"></line> <line x1="63" y1="35" x2="49" y2="63"></line>
+                    </svg>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                </div>
+            </div>
+            <div class="shape-item">
+                <div class="shape-title">④</div>
+                <div class="mini-board" style="grid-template-columns: repeat(7, 14px); width: 98px; height: 70px;">
+                    <svg class="mini-svg" style="width: 98px; height: 70px;">
+                        <line x1="49" y1="21" x2="21" y2="35"></line> <line x1="21" y1="35" x2="49" y2="49"></line>
+                        <line x1="49" y1="21" x2="77" y2="35"></line> <line x1="77" y1="35" x2="49" y2="49"></line>
+                    </svg>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                </div>
+            </div>
+            <div class="shape-item">
+                <div class="shape-title">⑤</div>
+                <div class="mini-board" style="grid-template-columns: repeat(6, 14px); width: 84px; height: 84px;">
+                    <svg class="mini-svg" style="width: 84px; height: 84px;">
+                        <line x1="35" y1="35" x2="63" y2="21"></line> <line x1="63" y1="21" x2="49" y2="49"></line>
+                        <line x1="35" y1="35" x2="21" y2="63"></line> <line x1="21" y1="63" x2="49" y2="49"></line>
+                    </svg>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-red"></div></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"><div class="m-peg-white"></div></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                    <div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div><div class="mini-cell"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button id="undo-btn">待った (1手戻す)</button>
+        <button id="reset-btn">リセット</button>
+        <button id="menu-btn">対戦モード選択画面へ</button>
+    </div>
+
+    <script>
+        const boardSize = 24;
+        const board = document.getElementById('board');
+        const svgLayer = document.getElementById('svg-layer');
+        const vsIndicator = document.getElementById('vs-indicator');
+        const indicator = document.getElementById('turn-indicator');
+        const hoverCoordDisplay = document.getElementById('hover-coordinate');
+        const undoBtn = document.getElementById('undo-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const menuBtn = document.getElementById('menu-btn');
+        
+        const configModal = document.getElementById('config-modal');
+        const configCancelBtn = document.getElementById('config-cancel-btn');
+        const configStartBtn = document.getElementById('config-start-btn');
+        const winnerModal = document.getElementById('winner-modal');
+        const winnerTitle = document.getElementById('winner-title');
+        const winnerMessage = document.getElementById('winner-message');
+        const winnerRestartBtn = document.getElementById('winner-restart-btn');
+        
+        const pieRuleBar = document.getElementById('pie-rule-bar');
+        const pieTextMsg = document.getElementById('pie-text-msg');
+        const pieSwapBtn = document.getElementById('pie-swap-btn');
+        const pieStayBtn = document.getElementById('pie-stay-btn');
+
+        const selectMode = document.getElementById('select-mode');
+        const selectSide = document.getElementById('select-side');
+        const selectLevel = document.getElementById('select-level');
+        const selectPie = document.getElementById('select-pie');
+        const cpuSideGroup = document.getElementById('cpu-side-group');
+        const cpuLevelGroup = document.getElementById('cpu-level-group');
+
+        let gameMode = 'pve';     
+        let playerColor = 'blue'; 
+        let cpuLevel = 3;          
+        let pieRuleEnabled = false; 
+        let pieRuleOffered = false; 
+        let wasPieSwapped = false;  
+        let isWaitingPieChoice = false; 
+
+        let currentPlayer = 'red';
+        let history = []; 
+        let pegs = {};    
+        let isGameOver = false;
+        let isCpuThinking = false;
+        let lastMoveKey = ""; 
+
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWX".split("");
+
+        const knightMoves = [
+            {dr: -2, dc: -1}, {dr: -2, dc: 1},
+            {dr: -1, dc: -2}, {dr: -1, dc: 2},
+            {dr: 1, dc: -2},  {dr: 1, dc: 2},
+            {dr: 2, dc: -1},  {dr: 2, dc: 1}
+        ];
+
+        const josekiJumps = [
+            {dr: -4, dc: -1}, {dr: -4, dc: 1}, {dr: -1, dc: -4}, {dr: 1, dc: -4},
+            {dr: 4, dc: -1},  {dr: 4, dc: 1},  {dr: -1, dc: 4},  {dr: 1, dc: 4},
+            {dr: -3, dc: -1}, {dr: -3, dc: 1}, {dr: -1, dc: -3}, {dr: 1, dc: -3},
+            {dr: 3, dc: -1},  {dr: 3, dc: 1},  {dr: -1, dc: 3},  {dr: 1, dc: 3},
+            {dr: -3, dc: -2}, {dr: -3, dc: 2}, {dr: -2, dc: -3}, {dr: 2, dc: -3},
+            {dr: 3, dc: -2},  {dr: 3, dc: 2},  {dr: -2, dc: 3},  {dr: 2, dc: 3}
+        ];
+
+        const emptyCorner = document.createElement('div');
+        emptyCorner.style.background = "#f0f0f0";
+        board.appendChild(emptyCorner);
+
+        for (let col = 0; col < boardSize; col++) {
+            const label = document.createElement('div');
+            label.classList.add('axis-label');
+            label.textContent = col + 1;
+            board.appendChild(label);
+        }
+
+        for (let row = 0; row < boardSize; row++) {
+            const label = document.createElement('div');
+            label.classList.add('axis-label');
+            label.textContent = alphabet[row];
+            board.appendChild(label);
+
+            for (let col = 0; col < boardSize; col++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell', `row-${row}`, `col-${col}`);
+                cell.id = `cell-${row}-${col}`;
+
+                cell.addEventListener('click', () => {
+                    if (isWaitingPieChoice) return; 
+                    if (gameMode === 'pve' && currentPlayer !== playerColor) return;
+                    placePeg(row, col);
+                });
+                
+                cell.addEventListener('mouseenter', () => {
+                    hoverCoordDisplay.textContent = `選択中の座標：${alphabet[row]}${col + 1}`;
+                    if (!isGameOver && !isCpuThinking && !isWaitingPieChoice && isValidMove(row, col, currentPlayer)) {
+                        if (gameMode === 'pvp' || currentPlayer === playerColor) {
+                            renderPreview(row, col, currentPlayer);
+                        }
+                    }
+                });
+                
+                cell.addEventListener('mouseleave', () => {
+                    hoverCoordDisplay.textContent = `選択中の座標：--`;
+                    clearPreview();
+                });
+
+                board.appendChild(cell);
+            }
+        }
+
+        selectMode.addEventListener('change', () => {
+            if (selectMode.value === 'pvp') {
+                cpuSideGroup.style.display = 'none';
+                cpuLevelGroup.style.display = 'none';
+            } else {
+                cpuSideGroup.style.display = 'flex';
+                cpuLevelGroup.style.display = 'flex';
+            }
+        });
+
+        menuBtn.addEventListener('click', () => {
+            configCancelBtn.style.display = 'inline-block';
+            configModal.style.display = 'flex';
+        });
+        configCancelBtn.addEventListener('click', () => {
+            configModal.style.display = 'none';
+        });
+
+        configStartBtn.addEventListener('click', () => {
+            gameMode = selectMode.value;
+            cpuLevel = parseInt(selectLevel.value);
+            pieRuleEnabled = (selectPie.value === 'true');
+
+            if (gameMode === 'pve') {
+                let chosenSide = selectSide.value;
+                if (chosenSide === 'random') {
+                    chosenSide = Math.random() < 0.5 ? 'red' : 'blue';
+                }
+                playerColor = chosenSide;
+            }
+
+            configModal.style.display = 'none';
+            initGame();
+        });
+
+        winnerRestartBtn.addEventListener('click', () => {
+            winnerModal.style.display = 'none';
+            initGame();
+        });
+        resetBtn.addEventListener('click', () => {
+            initGame();
+        });
+
+        undoBtn.addEventListener('click', () => {
+            if (history.length === 0 || isGameOver || isCpuThinking || isWaitingPieChoice) return;
+            
+            if (gameMode === 'pve') {
+                if (playerColor === 'blue' && history.length <= 1 && !wasPieSwapped) return;
+            }
+
+            let steps = (gameMode === 'pve') ? 2 : 1;
+            if (gameMode === 'pve' && playerColor === 'red' && history.length === 1) steps = 1; 
+
+            for (let i = 0; i < steps; i++) {
+                if (history.length === 0) break;
+                const last = history.pop();
+                if (last.type === 'pieswap') {
+                    wasPieSwapped = false;
+                    pieRuleOffered = false;
+                    if (gameMode === 'pve') playerColor = 'blue'; 
+                    currentPlayer = 'blue'; 
+                } else if (last.type === 'move') {
+                    delete pegs[`${last.row},${last.col}`];
+                    currentPlayer = last.player;
+                }
+            }
+
+            const lastMove = [...history].reverse().find(h => h.type === 'move');
+            lastMoveKey = lastMove ? `${lastMove.row},${lastMove.col}` : "";
+
+            reDrawAllPegsAndLinks();
+            updateIndicator();
+            pieRuleBar.style.display = 'none';
+        });
+
+        function updateVsDisplay() {
+            if (gameMode === 'pvp') {
+                vsIndicator.textContent = "対戦相手: プレイヤー";
+            } else {
+                const levels = { 1: "初級", 2: "中級", 3: "上級", 4: "超級" };
+                vsIndicator.textContent = `対戦相手: CPU (${levels[cpuLevel]})`;
+            }
+        }
+
+        function initGame() {
+            pegs = {};
+            history = [];
+            isGameOver = false;
+            isCpuThinking = false;
+            isWaitingPieChoice = false;
+            currentPlayer = 'red';
+            pieRuleOffered = false;
+            wasPieSwapped = false;
+            lastMoveKey = "";
+            pieRuleBar.style.display = 'none';
+            winnerModal.style.display = 'none';
+            
+            updateVsDisplay();
+            reDrawAllPegsAndLinks();
+            updateIndicator();
+            checkCpuTurn();
+        }
+
+        function isCorner(r, c) {
+            return (r === 0 || r === boardSize - 1) && (c === 0 || c === boardSize - 1);
+        }
+
+        // 【バグ修正】置こうとしているマスが「敵の既存のリンク」を跨いだり交差したりしていないかを厳格にチェック
+        function isValidMove(row, col, player) {
+            const key = `${row},${col}`;
+            if (pegs[key] || isCorner(row, col)) return false;
+            if (player === 'red' && (col === 0 || col === boardSize - 1)) return false;
+            if (player === 'blue' && (row === 0 || row === boardSize - 1)) return false;
+
+            // 現在の全リンクを取得
+            const currentLinks = getLinksForState(pegs);
+            const opponent = player === 'red' ? 'blue' : 'red';
+
+            // ルール：敵のリンクが完全に跨いで通っているルート上の交差ポイントにはペグを置けない
+            // 新たに置くペグから、想定される周囲のリンク（ナイトジャンプ位置）への仮想線を検証し、
+            // それが敵のリンクと「完全にペグを殺し合う交差点」になっていないかを防衛判定
+            for (const link of currentLinks) {
+                if (link.color === opponent) {
+                    // 敵のリンクの線分 (link.r1, link.c1) - (link.r2, link.c2) と、
+                    // 今回置くマス (row, col) が完全に干渉（交差計算上の重複）をクリティカルに起こすか判定
+                    // 簡易的かつ厳密に、敵のリンクを遮断・上書きして物理的に断ち切るマスへの着手を禁止します。
+                    if (checkPegInterferenceWithLink(row, col, link.r1, link.c1, link.r2, link.c2)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // ペグ単体が敵の既存リンク（JUMP線）の「クロス交点」の中心を潰して上書きしようとしていないか判定
+        function checkPegInterferenceWithLink(pr, pc, r1, c1, r2, c2) {
+            // ナイトジャンプの線分は必ず [縦1×横2] か [縦2×横1]
+            // その線分が通る中心（または遮断点）にペグをダイレクトに打つことはできない
+            // 例：(r1,c1)から(r2,c2)への移動のグリッド矩形内で、このペグが線をまたぎ殺しているかを検証
+            const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+            const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+            
+            if (pr >= minR && pr <= maxR && pc >= minC && pc <= maxC) {
+                // 線分の方程式： (c2 - c1)*(r - r1) - (r2 - r1)*(c - c1) = 0 に近い、かつ
+                // リンクを物理的に消滅させるような「交点乗り上げ」を防ぐ
+                // TwixTの特性上、1マス飛び線の下をくぐるマス(交差位置)に直接ペグを置くと線が割れるため禁止
+                const crossProduct = (c2 - c1) * (pr - r1) - (r2 - r1) * (pc - c1);
+                if (Math.abs(crossProduct) === 1 || crossProduct === 0) {
+                    // グリッド上でリンク線が貫通している内側マスの判定
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function placePeg(row, col) {
+            if (isGameOver || isCpuThinking || !isValidMove(row, col, currentPlayer)) return;
+
+            clearPreview();
+            const key = `${row},${col}`;
+            pegs[key] = currentPlayer; 
+            lastMoveKey = key;
+            history.push({ type: 'move', row, col, player: currentPlayer });
+
+            renderPegOnBoard(row, col, currentPlayer);
+            const activeLinks = reDrawAllLinks();
+            updateLastMoveHighlight();
+
+            if (checkVictory(currentPlayer, activeLinks)) {
+                endGame(currentPlayer);
+                return;
+            }
+
+            if (pieRuleEnabled && history.length === 1 && !pieRuleOffered) {
+                pieRuleOffered = true;
+                if (gameMode === 'pvp') {
+                    currentPlayer = 'blue';
+                    updateIndicator();
+                    pieTextMsg.textContent = "🥧 先手の初手が打たれました。手番を交換しますか？";
+                    pieRuleBar.style.display = 'flex';
+                    isWaitingPieChoice = true;
+                    return;
+                } else {
+                    if (playerColor === 'blue') {
+                        currentPlayer = 'blue';
+                        updateIndicator();
+                        pieTextMsg.textContent = "🥧 CPU（赤）が初手を打ちました。手番を交換してあなたが赤（先手番）を引き継ぎますか？";
+                        pieRuleBar.style.display = 'flex';
+                        isWaitingPieChoice = true; 
+                        return;
+                    } else {
+                        setTimeout(() => {
+                            if (Math.abs(row - 11.5) + Math.abs(col - 11.5) < 8) {
+                                alert("CPUが手番交換(パイ・ルール)を選択しました。CPUが「赤」、あなたが「青」になります。");
+                                executePieSwap();
+                            } else {
+                                alert("CPUは手番交換をせず「青」のまま続行します。");
+                                currentPlayer = 'blue';
+                                updateIndicator();
+                                checkCpuTurn();
+                            }
+                        }, 400);
+                        return;
+                    }
+                }
+            }
+
+            currentPlayer = currentPlayer === 'red' ? 'blue' : 'red';
+            updateIndicator();
+            checkCpuTurn();
+        }
+
+        function executePieSwap() {
+            pieRuleBar.style.display = 'none';
+            isWaitingPieChoice = false;
+            history.push({ type: 'pieswap' });
+            wasPieSwapped = true;
+
+            if (gameMode === 'pve') {
+                playerColor = (playerColor === 'red') ? 'blue' : 'red';
+            }
+
+            currentPlayer = 'blue'; 
+            reDrawAllPegsAndLinks();
+            updateIndicator();
+            checkCpuTurn();
+        }
+
+        pieStayBtn.addEventListener('click', () => {
+            pieRuleBar.style.display = 'none';
+            isWaitingPieChoice = false;
+            currentPlayer = 'blue'; 
+            updateIndicator();
+            checkCpuTurn();
+        });
+
+        pieSwapBtn.addEventListener('click', executePieSwap);
+
+        function renderPegOnBoard(row, col, player, isPreview = false) {
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            if (!cell) return;
+            const peg = document.createElement('div');
+            peg.classList.add('peg', player === 'red' ? 'peg-red' : 'peg-blue');
+            if (isPreview) peg.classList.add('peg-preview');
+            cell.appendChild(peg);
+        }
+
+        function clearPreview() {
+            const previews = document.querySelectorAll('.peg-preview');
+            previews.forEach(p => p.remove());
+        }
+
+        function renderPreview(row, col, player) {
+            clearPreview();
+            renderPegOnBoard(row, col, player, true);
+        }
+
+        function reDrawAllPegsAndLinks() {
+            for (let row = 0; row < boardSize; row++) {
+                for (let col = 0; col < boardSize; col++) {
+                    const cell = document.getElementById(`cell-${row}-${col}`);
+                    if (cell) cell.innerHTML = '';
+                }
+            }
+            for (let key in pegs) {
+                const [r, c] = key.split(',').map(Number);
+                renderPegOnBoard(r, c, pegs[key]);
+            }
+            reDrawAllLinks();
+            updateLastMoveHighlight();
+        }
+
+        function updateLastMoveHighlight() {
+            const oldMarker = document.querySelector('.last-move-marker');
+            if (oldMarker) oldMarker.remove();
+
+            if (history.length === 0) return;
+            const lastMove = [...history].reverse().find(h => h.type === 'move');
+            if (!lastMove) return;
+
+            const cell = document.getElementById(`cell-${lastMove.row}-${lastMove.col}`);
+            if (cell) {
+                const marker = document.createElement('div');
+                marker.classList.add('last-move-marker');
+                cell.appendChild(marker);
+            }
+        }
+
+        function isCrossedWithExistingLinks(r1, c1, r2, c2, existingLinks) {
+            for (const el of existingLinks) {
+                if (checkLineIntersection(r1, c1, r2, c2, el.r1, el.c1, el.r2, el.c2)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getLinksForState(statePegs) {
+            const links = [];
+            const keys = Object.keys(statePegs);
+            for (let i = 0; i < keys.length; i++) {
+                for (let j = i + 1; j < keys.length; j++) {
+                    const p1 = keys[i];
+                    const p2 = keys[j];
+                    if (statePegs[p1] !== statePegs[p2]) continue;
+
+                    const [r1, c1] = p1.split(',').map(Number);
+                    const [r2, c2] = p2.split(',').map(Number);
+
+                    if (Math.abs(r1 - r2) * Math.abs(c1 - c2) === 2) {
+                        links.push({p1, p2, color: statePegs[p1], r1, c1, r2, c2});
+                    }
+                }
+            }
+
+            const activeLinks = [];
+            for (const l of links) {
+                let intersect = false;
+                for (const al of activeLinks) {
+                    if (l.color !== al.color && checkLineIntersection(l.r1, l.c1, l.r2, l.c2, al.r1, al.c1, al.r2, al.c2)) {
+                        intersect = true;
+                        break;
+                    }
+                }
+                if (!intersect) activeLinks.push(l);
+            }
+            return activeLinks;
+        }
+
+        function reDrawAllLinks() {
+            svgLayer.innerHTML = '';
+            const activeLinks = getLinksForState(pegs);
+            for (const l of activeLinks) {
+                drawSvgLine(l.r1, l.c1, l.r2, l.c2, l.color);
+            }
+            return activeLinks;
+        }
+
+        function drawSvgLine(r1, c1, r2, c2, color) {
+            const cell1 = document.getElementById(`cell-${r1}-${c1}`);
+            const cell2 = document.getElementById(`cell-${r2}-${c2}`);
+            if (!cell1 || !cell2) return;
+
+            const boardRect = svgLayer.getBoundingClientRect();
+            const rect1 = cell1.getBoundingClientRect();
+            const rect2 = cell2.getBoundingClientRect();
+
+            const x1 = rect1.left + rect1.width / 2 - boardRect.left;
+            const y1 = rect1.top + rect1.height / 2 - boardRect.top;
+            const x2 = rect2.left + rect2.width / 2 - boardRect.left;
+            const y2 = rect2.top + rect2.height / 2 - boardRect.top;
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+            line.setAttribute('stroke', color === 'red' ? '#cc0000' : '#0044cc');
+            line.setAttribute('stroke-width', '3');
+            svgLayer.appendChild(line);
+        }
+
+        function checkLineIntersection(a_r, a_c, b_r, b_c, c_r, c_c, d_r, d_c) {
+            const ta = (c_c - d_c) * (a_r - c_r) + (d_r - c_r) * (a_c - c_c);
+            const tb = (c_c - d_c) * (b_r - c_r) + (d_r - c_r) * (b_c - c_c);
+            const tc = (a_c - b_c) * (c_r - a_r) + (b_r - a_r) * (c_c - a_c);
+            const td = (a_c - b_c) * (d_r - a_r) + (b_r - a_r) * (d_c - a_c);
+            return tc * td < 0 && ta * tb < 0;
+        }
+
+        function updateIndicator() {
+            let modeTxt = "";
+            if (gameMode === 'pve') {
+                modeTxt = (currentPlayer === playerColor) ? " (あなた)" : " (CPU)";
+            }
+            if (currentPlayer === 'red') {
+                indicator.innerHTML = `現在の番: <span style="color: #e53935;">赤 (上下)${modeTxt}${isCpuThinking ? ' [思考中...]' : ''}</span>`;
+            } else {
+                indicator.innerHTML = `現在の番: <span style="color: #1e88e5;">青 (左右)${modeTxt}${isCpuThinking ? ' [思考中...]' : ''}</span>`;
+            }
+        }
+
+        function checkVictory(player, activeLinks) {
+            const adj = {};
+            for (let key in pegs) {
+                if (pegs[key] === player) adj[key] = [];
+            }
+            for (const l of activeLinks) {
+                if (l.color === player) {
+                    if (adj[l.p1] && adj[l.p2]) {
+                        adj[l.p1].push(l.p2);
+                        adj[l.p2].push(l.p1);
+                    }
+                }
+            }
+
+            const visited = new Set();
+            const queue = [];
+
+            for (let key in pegs) {
+                if (pegs[key] !== player) continue;
+                const [r, c] = key.split(',').map(Number);
+                if (player === 'red' && r === 0) { queue.push(key); visited.add(key); }
+                if (player === 'blue' && c === 0) { queue.push(key); visited.add(key); }
+            }
+
+            while (queue.length > 0) {
+                const curr = queue.shift();
+                const [r, c] = curr.split(',').map(Number);
+
+                if (player === 'red' && r === boardSize - 1) return true;
+                if (player === 'blue' && c === boardSize - 1) return true;
+
+                if (!adj[curr]) continue;
+                for (const next of adj[curr]) {
+                    if (!visited.has(next)) {
+                        visited.add(next);
+                        queue.push(next);
+                    }
+                }
+            }
+            return false;
+        }
+
+        function endGame(winner) {
+            isGameOver = true;
+            if (gameMode === 'pve') {
+                if (winner === playerColor) {
+                    winnerTitle.textContent = "🏆 VICTORY 🏆";
+                    winnerTitle.style.color = "#2e7d32";
+                    winnerMessage.textContent = "おめでとうございます！あなたの勝ちです！";
+                } else {
+                    winnerTitle.textContent = "💀 DEFEAT 💀";
+                    winnerTitle.style.color = "#c62828";
+                    winnerMessage.textContent = "残念…！CPUの勝ちです。";
+                }
+            } else {
+                winnerTitle.textContent = "GAME OVER";
+                winnerTitle.style.color = "#333";
+                winnerMessage.textContent = winner === 'red' ? '赤（上下）の勝ち！' : '青（左右）の勝ち！';
+            }
+            winnerModal.style.display = 'flex';
+        }
+
+        function checkCpuTurn() {
+            if (isGameOver || isWaitingPieChoice) return;
+            if (gameMode === 'pve' && currentPlayer !== playerColor) {
+                isCpuThinking = true;
+                updateIndicator();
+                setTimeout(() => {
+                    makeCpuMoveBuilt();
+                }, 100);
+            }
+        }
+
+        function computeShortestPathToGoal(statePegs, player, useJosekiEvaluation = false) {
+            const opponent = (player === 'red') ? 'blue' : 'red';
+            const baseLinks = getLinksForState(statePegs);
+            const oppExistingLinks = baseLinks.filter(l => l.color === opponent);
+
+            const dist = {};
+            const queue = [];
+
+            for (let i = 0; i < boardSize; i++) {
+                if (player === 'red') {
+                    if (isValidMove(0, i, 'red') || statePegs[`0,${i}`] === 'red') {
+                        const k = `0,${i}`;
+                        dist[k] = (statePegs[k] === 'red') ? 0 : 1;
+                        queue.push({k, d: dist[k], r: 0, c: i});
+                    }
+                } else {
+                    if (isValidMove(i, 0, 'blue') || statePegs[`i,0`] === 'blue') {
+                        const k = `${i},0`;
+                        dist[k] = (statePegs[k] === 'blue') ? 0 : 1;
+                        queue.push({k, d: dist[k], r: i, c: 0});
+                    }
+                }
+            }
+
+            let minCost = 99;
+
+            while (queue.length > 0) {
+                queue.sort((a, b) => a.d - b.d);
+                const curr = queue.shift();
+
+                if (curr.d > dist[curr.k]) continue;
+
+                if (player === 'red' && curr.r === boardSize - 1) { minCost = Math.min(minCost, curr.d); break; }
+                if (player === 'blue' && curr.c === boardSize - 1) { minCost = Math.min(minCost, curr.d); break; }
+
+                for (const move of knightMoves) {
+                    const nr = curr.r + move.dr;
+                    const nc = curr.c + move.dc;
+
+                    if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
+                    if (isCorner(nr, nc)) continue;
+                    
+                    const tk = `${nr},${nc}`;
+                    if (statePegs[tk] === opponent) continue;
+                    if (player === 'red' && (nc === 0 || nc === boardSize - 1)) continue;
+                    if (player === 'blue' && (nr === 0 || nr === boardSize - 1)) continue;
+                    
+                    if (isCrossedWithExistingLinks(curr.r, curr.c, nr, nc, oppExistingLinks)) continue;
+
+                    const cost = (statePegs[tk] === player) ? 0 : 1;
+                    const nextD = curr.d + cost;
+
+                    if (dist[tk] === undefined || nextD < dist[tk]) {
+                        dist[tk] = nextD;
+                        queue.push({k: tk, d: nextD, r: nr, c: nc});
+                    }
+                }
+
+                if (useJosekiEvaluation && statePegs[curr.k] === player) {
+                    for (const jump of josekiJumps) {
+                        const nr = curr.r + jump.dr;
+                        const nc = curr.c + jump.dc;
+
+                        if (nr < 0 || nr >= boardSize || nc < 0 || nc >= boardSize) continue;
+                        const tk = `${nr},${nc}`;
+                        
+                        if (statePegs[tk] === player) {
+                            if (!isCrossedWithExistingLinks(curr.r, curr.c, nr, nc, oppExistingLinks)) {
+                                const nextD = curr.d + 0.1; 
+                                if (dist[tk] === undefined || nextD < dist[tk]) {
+                                    dist[tk] = nextD;
+                                    queue.push({k: tk, d: nextD, r: nr, c: nc});
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return minCost;
+        }
+
+        function getAllValidMoves(statePegs, player) {
+            const list = [];
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    if (isValidMove(r, c, player)) list.push({r, c});
+                }
+            }
+            return list;
+        }
+
+        function getSmartCandidates(statePegs, player) {
+            const checked = new Set();
+            const list = [];
+            
+            let hasPegs = false;
+            for (let key in statePegs) {
+                hasPegs = true;
+                const [r, c] = key.split(',').map(Number);
+                const searchOffsets = [...knightMoves, ...josekiJumps];
+                for (const m of searchOffsets) {
+                    const nr = r + m.dr, nc = c + m.dc;
+                    if (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize) {
+                        const tk = `${nr},${nc}`;
+                        if (!checked.has(tk) && isValidMove(nr, nc, player)) {
+                            checked.add(tk);
+                            list.push({r: nr, c: nc});
+                        }
+                    }
+                }
+            }
+            if (!hasPegs || list.length < 5) {
+                return getAllValidMoves(statePegs, player);
+            }
+            return list;
+        }
+
+        function makeCpuMoveBuilt() {
+            const ai = currentPlayer;
+            const opp = (ai === 'red') ? 'blue' : 'red';
+
+            const movesPlayed = Object.keys(pegs).length;
+            if (movesPlayed === 0 && ai === 'red') {
+                let r = 11, c = 11;
+                if (cpuLevel === 1) {
+                    r = Math.floor(Math.random() * 14) + 5; 
+                    c = Math.floor(Math.random() * 13) + 5; 
+                } else if (cpuLevel === 2) {
+                    r = Math.floor(Math.random() * 10) + 7;
+                    c = Math.floor(Math.random() * 9) + 7;
+                } else {
+                    r = 11; c = 11;
+                }
+                if (isValidMove(r, c, ai)) {
+                    isCpuThinking = false;
+                    placePeg(r, c);
+                    return;
+                }
+            }
+
+            const useJoseki = (cpuLevel >= 3);
+
+            const currentMyDist = computeShortestPathToGoal(pegs, ai, useJoseki);
+            const currentOppDist = computeShortestPathToGoal(pegs, opp, useJoseki);
+            
+            const isEmergencyBlockMode = (cpuLevel === 4 && currentOppDist <= 5);
+
+            let candidates = getSmartCandidates(pegs, ai);
+
+            if (candidates.length === 0) {
+                isCpuThinking = false;
+                return;
+            }
+
+            candidates.forEach(m => {
+                const k = `${m.r},${m.c}`;
+                
+                pegs[k] = ai;
+                m.myNextDist = computeShortestPathToGoal(pegs, ai, useJoseki);
+                m.oppNextDistWithMyMove = computeShortestPathToGoal(pegs, opp, useJoseki);
+                
+                pegs[k] = opp;
+                m.oppNextDist = computeShortestPathToGoal(pegs, opp, useJoseki);
+                m.myNextDistWithOppMove = computeShortestPathToGoal(pegs, ai, useJoseki);
+                
+                delete pegs[k];
+
+                m.centerDist = Math.abs(m.r - 11.5) + Math.abs(m.c - 11.5);
+                m.blockValue = m.oppNextDistWithMyMove - currentOppDist;
+            });
+
+            let bestMove = candidates[0];
+
+            if (isEmergencyBlockMode) {
+                candidates.sort((a, b) => b.blockValue - a.blockValue || a.myNextDist - b.myNextDist);
+                bestMove = candidates[0];
+            } else if (cpuLevel === 1) {
+                candidates.sort((a, b) => a.myNextDist - b.myNextDist || a.centerDist - b.centerDist);
+                bestMove = candidates[0];
+            } else if (cpuLevel === 2) {
+                if (currentMyDist >= currentOppDist) {
+                    candidates.sort((a, b) => b.oppNextDistWithMyMove - a.oppNextDistWithMyMove || a.oppNextDist - b.oppNextDist);
+                } else {
+                    candidates.sort((a, b) => a.myNextDist - b.myNextDist || b.myNextDistWithOppMove - a.myNextDistWithOppMove);
+                }
+                bestMove = candidates[0];
+            } else if (cpuLevel === 3) {
+                candidates.sort((a, b) => {
+                    const scoreA = (a.oppNextDistWithMyMove * 1.2) - a.myNextDist;
+                    const scoreB = (b.oppNextDistWithMyMove * 1.2) - b.myNextDist;
+                    return scoreB - scoreA || a.centerDist - b.centerDist;
+                });
+                bestMove = candidates[0];
+            } else if (cpuLevel === 4) {
+                candidates.sort((a, b) => {
+                    const evalA = (a.oppNextDistWithMyMove * 1.5) - a.myNextDist;
+                    const evalB = (b.oppNextDistWithMyMove * 1.5) - b.myNextDist;
+                    return evalB - evalA || b.oppNextDist - a.oppNextDist;
+                });
+                bestMove = candidates[0];
+            }
+
+            isCpuThinking = false;
+            if (bestMove) {
+                placePeg(bestMove.r, bestMove.c);
+            }
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
