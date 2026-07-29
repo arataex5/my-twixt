@@ -480,7 +480,7 @@
             {dr: -4, dc: -1}, {dr: -4, dc: 1}, {dr: -1, dc: -4}, {dr: 1, dc: -4},
             {dr: 4, dc: -1},  {dr: 4, dc: 1},  {dr: -1, dc: 4},  {dr: 1, dc: 4},
             {dr: -3, dc: -1}, {dr: -3, dc: 1}, {dr: -1, dc: -3}, {dr: 1, dc: -3},
-            {dr: 3, dc: -1},  {dr: 3, dc: 1},  {dr: -1, dc: 3},  {dr: 1, dc: 3},
+            {dr: 3, dc: -1},  {dr: 3, dc: 2},  {dr: -1, dc: 3},  {dr: 1, dc: 3},
             {dr: -3, dc: -2}, {dr: -3, dc: 2}, {dr: -2, dc: -3}, {dr: 2, dc: -3},
             {dr: 3, dc: -2},  {dr: 3, dc: 2},  {dr: -2, dc: 3},  {dr: 2, dc: 3}
         ];
@@ -508,7 +508,7 @@
                 cell.id = `cell-${row}-${col}`;
 
                 cell.addEventListener('click', () => {
-                    if (isWaitingPieChoice) return; 
+                    if (isWaitingPieChoice || isGameOver || isCpuThinking) return; 
                     if (gameMode === 'pve' && currentPlayer !== playerColor) return;
                     placePeg(row, col);
                 });
@@ -542,6 +542,7 @@
         });
 
         menuBtn.addEventListener('click', () => {
+            if (isCpuThinking) return;
             configCancelBtn.style.display = 'inline-block';
             configModal.style.display = 'flex';
         });
@@ -571,6 +572,7 @@
             initGame();
         });
         resetBtn.addEventListener('click', () => {
+            if (isCpuThinking) return;
             initGame();
         });
 
@@ -647,6 +649,7 @@
             const currentLinks = getLinksForState(pegs);
             const opponent = player === 'red' ? 'blue' : 'red';
 
+            // 相手の既存リンクの直上（線上）にペグを重ねて置こうとしていないかのみチェック
             for (const link of currentLinks) {
                 if (link.color === opponent) {
                     if (checkPegInterferenceWithLink(row, col, link.r1, link.c1, link.r2, link.c2)) {
@@ -654,20 +657,22 @@
                     }
                 }
             }
+
             return true;
         }
 
         function checkPegInterferenceWithLink(pr, pc, r1, c1, r2, c2) {
             const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
             const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
-            
+    
             if (pr >= minR && pr <= maxR && pc >= minC && pc <= maxC) {
                 const crossProduct = (c2 - c1) * (pr - r1) - (r2 - r1) * (pc - c1);
-                if (Math.abs(crossProduct) === 1 || crossProduct === 0) {
-                    return true;
+            // 外積が0（直線上に完全に位置する）場合のみ干渉とみなす
+            if (crossProduct === 0) {
+            return true;
                 }
             }
-            return false;
+        return false;
         }
 
         function placePeg(row, col) {
@@ -812,8 +817,18 @@
             return false;
         }
 
-        function getLinksForState(statePegs) {
+function getLinksForState(statePegs) {
             const links = [];
+            
+            // 着手順（history）に基づいてペグのインデックスマップを作成
+            // （historyにない盤面状態チェック用として、未登録のキーはInfinityとする）
+            const pegMoveOrder = {};
+            history.forEach((h, idx) => {
+                if (h.type === 'move') {
+                    pegMoveOrder[`${h.row},${h.col}`] = idx;
+                }
+            });
+
             const keys = Object.keys(statePegs);
             for (let i = 0; i < keys.length; i++) {
                 for (let j = i + 1; j < keys.length; j++) {
@@ -825,10 +840,23 @@
                     const [r2, c2] = p2.split(',').map(Number);
 
                     if (Math.abs(r1 - r2) * Math.abs(c1 - c2) === 2) {
-                        links.push({p1, p2, color: statePegs[p1], r1, c1, r2, c2});
+                        // この2つのペグのうち「後から打たれた方」の着手手番を取得
+                        const order1 = pegMoveOrder[p1] !== undefined ? pegMoveOrder[p1] : 99999;
+                        const order2 = pegMoveOrder[p2] !== undefined ? pegMoveOrder[p2] : 99999;
+                        const maxOrder = Math.max(order1, order2);
+
+                        links.push({
+                            p1, p2, 
+                            color: statePegs[p1], 
+                            r1, c1, r2, c2,
+                            order: maxOrder // ブリッジが完成した手番の順序
+                        });
                     }
                 }
             }
+
+            // 【重要】古く成立したブリッジ（orderが小さいもの）を優先するようにソート
+            links.sort((a, b) => a.order - b.order);
 
             const activeLinks = [];
             for (const l of links) {
@@ -986,7 +1014,7 @@
                         queue.push({k, d: dist[k], r: 0, c: i});
                     }
                 } else {
-                    if (isValidMove(i, 0, 'blue') || statePegs[`i,0`] === 'blue') {
+                    if (isValidMove(i, 0, 'blue') || statePegs[`${i},0`] === 'blue') {
                         const k = `${i},0`;
                         dist[k] = (statePegs[k] === 'blue') ? 0 : 1;
                         queue.push({k, d: dist[k], r: i, c: 0});
@@ -1159,7 +1187,7 @@
             } else if (cpuLevel === 3) {
                 candidates.sort((a, b) => {
                     const scoreA = (a.oppNextDistWithMyMove * 1.2) - a.myNextDist;
-                    const scoreB = (b.oppNextDistWithMyMove * 1.2) - a.myNextDist;
+                    const scoreB = (b.oppNextDistWithMyMove * 1.2) - b.myNextDist;
                     return scoreB - scoreA || a.centerDist - b.centerDist;
                 });
                 bestMove = candidates[0];
