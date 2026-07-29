@@ -102,7 +102,6 @@
         }
         .cell:hover::after { background: #000; width: 8px; height: 8px; }
 
-        /* A1, A24, X1, X24 (四隅のマス) の点を非表示にする設定 */
         .row-0.col-0::after,
         .row-0.col-23::after,
         .row-23.col-0::after,
@@ -151,6 +150,23 @@
             z-index: 4; 
             pointer-events: none;
             box-sizing: border-box;
+        }
+
+        /* スマホ用「ペグを置く」ボタン */
+        .mobile-place-btn {
+            display: none;
+            position: absolute;
+            z-index: 20;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            background: #2e7d32;
+            color: #ffffff;
+            border: 1px solid #1b5e20;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            pointer-events: auto;
+            transform: translateY(-50%);
         }
 
         .axis-label {
@@ -332,6 +348,8 @@
 
             <svg class="svg-layer" id="svg-layer"></svg>
             <div class="grid-layer" id="board"></div>
+            <!-- スマホ用の配置ボタン -->
+            <button class="mobile-place-btn" id="mobile-place-btn">ペグを置く</button>
         </div>
 
         <!-- 右側：ガイドパネル -->
@@ -424,6 +442,8 @@
     <script>
         const boardSize = 24;
         const board = document.getElementById('board');
+        const boardWrapper = document.querySelector('.board-wrapper');
+        const mobilePlaceBtn = document.getElementById('mobile-place-btn');
         const svgLayer = document.getElementById('svg-layer');
         const vsIndicator = document.getElementById('vs-indicator');
         const indicator = document.getElementById('turn-indicator');
@@ -451,6 +471,15 @@
         const selectPie = document.getElementById('select-pie');
         const cpuSideGroup = document.getElementById('cpu-side-group');
         const cpuLevelGroup = document.getElementById('cpu-level-group');
+
+        let isTouchDevice = false;
+        let selectedCoords = null; // スマホでの選択状態 {row, col}
+
+        window.addEventListener('touchstart', function onFirstTouch() {
+            isTouchDevice = true;
+            document.body.classList.add('is-touch');
+            window.removeEventListener('touchstart', onFirstTouch, false);
+        }, false);
 
         let gameMode = 'pve';     
         let playerColor = 'blue'; 
@@ -496,6 +525,60 @@
             board.appendChild(label);
         }
 
+        function handleCellSelect(row, col) {
+            if (isWaitingPieChoice || isGameOver || isCpuThinking) return;
+            if (gameMode === 'pve' && currentPlayer !== playerColor) return;
+
+            if (isTouchDevice || window.innerWidth <= 820) {
+                if (selectedCoords && selectedCoords.row === row && selectedCoords.col === col) {
+                    hideMobileButton();
+                    return;
+                }
+                selectedCoords = { row, col };
+                hoverCoordDisplay.textContent = `選択中の座標：${alphabet[row]}${col + 1}`;
+                
+                if (isValidMove(row, col, currentPlayer)) {
+                    renderPreview(row, col, currentPlayer);
+                    showMobileButton(row, col);
+                } else {
+                    hideMobileButton();
+                }
+            } else {
+                placePeg(row, col);
+            }
+        }
+
+        function showMobileButton(row, col) {
+            const cell = document.getElementById(`cell-${row}-${col}`);
+            if (!cell) return;
+
+            const cellRect = cell.getBoundingClientRect();
+            const wrapperRect = boardWrapper.getBoundingClientRect();
+
+            const left = cellRect.right - wrapperRect.left + 5;
+            const top = cellRect.top - wrapperRect.top + (cellRect.height / 2);
+
+            mobilePlaceBtn.style.left = `${left}px`;
+            mobilePlaceBtn.style.top = `${top}px`;
+            mobilePlaceBtn.style.display = 'block';
+        }
+
+        function hideMobileButton() {
+            mobilePlaceBtn.style.display = 'none';
+            selectedCoords = null;
+            clearPreview();
+            hoverCoordDisplay.textContent = `選択中の座標：--`;
+        }
+
+        mobilePlaceBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (selectedCoords) {
+                const { row, col } = selectedCoords;
+                hideMobileButton();
+                placePeg(row, col);
+            }
+        });
+
         for (let row = 0; row < boardSize; row++) {
             const label = document.createElement('div');
             label.classList.add('axis-label');
@@ -507,13 +590,13 @@
                 cell.classList.add('cell', `row-${row}`, `col-${col}`);
                 cell.id = `cell-${row}-${col}`;
 
-                cell.addEventListener('click', () => {
-                    if (isWaitingPieChoice || isGameOver || isCpuThinking) return; 
-                    if (gameMode === 'pve' && currentPlayer !== playerColor) return;
-                    placePeg(row, col);
+                cell.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleCellSelect(row, col);
                 });
                 
                 cell.addEventListener('mouseenter', () => {
+                    if (isTouchDevice) return;
                     hoverCoordDisplay.textContent = `選択中の座標：${alphabet[row]}${col + 1}`;
                     if (!isGameOver && !isCpuThinking && !isWaitingPieChoice && isValidMove(row, col, currentPlayer)) {
                         if (gameMode === 'pvp' || currentPlayer === playerColor) {
@@ -523,6 +606,7 @@
                 });
                 
                 cell.addEventListener('mouseleave', () => {
+                    if (isTouchDevice) return;
                     hoverCoordDisplay.textContent = `選択中の座標：--`;
                     clearPreview();
                 });
@@ -578,6 +662,7 @@
 
         undoBtn.addEventListener('click', () => {
             if (history.length === 0 || isGameOver || isCpuThinking || isWaitingPieChoice) return;
+            hideMobileButton();
             
             if (gameMode === 'pve') {
                 if (playerColor === 'blue' && history.length <= 1 && !wasPieSwapped) return;
@@ -627,6 +712,7 @@
             pieRuleOffered = false;
             wasPieSwapped = false;
             lastMoveKey = "";
+            hideMobileButton();
             pieRuleBar.style.display = 'none';
             winnerModal.style.display = 'none';
             
@@ -649,7 +735,6 @@
             const currentLinks = getLinksForState(pegs);
             const opponent = player === 'red' ? 'blue' : 'red';
 
-            // 相手の既存リンクの直上（線上）にペグを重ねて置こうとしていないかのみチェック
             for (const link of currentLinks) {
                 if (link.color === opponent) {
                     if (checkPegInterferenceWithLink(row, col, link.r1, link.c1, link.r2, link.c2)) {
@@ -667,17 +752,17 @@
     
             if (pr >= minR && pr <= maxR && pc >= minC && pc <= maxC) {
                 const crossProduct = (c2 - c1) * (pr - r1) - (r2 - r1) * (pc - c1);
-            // 外積が0（直線上に完全に位置する）場合のみ干渉とみなす
-            if (crossProduct === 0) {
-            return true;
+                if (crossProduct === 0) {
+                    return true;
                 }
             }
-        return false;
+            return false;
         }
 
         function placePeg(row, col) {
             if (isGameOver || isCpuThinking || !isValidMove(row, col, currentPlayer)) return;
 
+            hideMobileButton();
             clearPreview();
             const key = `${row},${col}`;
             pegs[key] = currentPlayer; 
@@ -817,11 +902,8 @@
             return false;
         }
 
-function getLinksForState(statePegs) {
+        function getLinksForState(statePegs) {
             const links = [];
-            
-            // 着手順（history）に基づいてペグのインデックスマップを作成
-            // （historyにない盤面状態チェック用として、未登録のキーはInfinityとする）
             const pegMoveOrder = {};
             history.forEach((h, idx) => {
                 if (h.type === 'move') {
@@ -840,7 +922,6 @@ function getLinksForState(statePegs) {
                     const [r2, c2] = p2.split(',').map(Number);
 
                     if (Math.abs(r1 - r2) * Math.abs(c1 - c2) === 2) {
-                        // この2つのペグのうち「後から打たれた方」の着手手番を取得
                         const order1 = pegMoveOrder[p1] !== undefined ? pegMoveOrder[p1] : 99999;
                         const order2 = pegMoveOrder[p2] !== undefined ? pegMoveOrder[p2] : 99999;
                         const maxOrder = Math.max(order1, order2);
@@ -849,13 +930,12 @@ function getLinksForState(statePegs) {
                             p1, p2, 
                             color: statePegs[p1], 
                             r1, c1, r2, c2,
-                            order: maxOrder // ブリッジが完成した手番の順序
+                            order: maxOrder
                         });
                     }
                 }
             }
 
-            // 【重要】古く成立したブリッジ（orderが小さいもの）を優先するようにソート
             links.sort((a, b) => a.order - b.order);
 
             const activeLinks = [];
@@ -969,6 +1049,7 @@ function getLinksForState(statePegs) {
 
         function endGame(winner) {
             isGameOver = true;
+            hideMobileButton();
             if (gameMode === 'pve') {
                 if (winner === playerColor) {
                     winnerTitle.textContent = "🏆 VICTORY 🏆";
